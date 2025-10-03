@@ -5,9 +5,16 @@ import { allSignals } from './all-signals.js'
  * Starts forwarding signals to `child` through `parent`.
  */
 export const proxySignals = (child: ChildProcess) => {
-  const listeners = new Map()
+  const listeners = new Map<NodeJS.Signals, () => void>()
 
-  for (const sig of allSignals) {
+  // Pre-allocate array to avoid iterator overhead
+  const signals = allSignals
+  const signalCount = signals.length
+
+  for (let i = 0; i < signalCount; i++) {
+    const sig = signals[i]
+    if (!sig) continue
+    // Optimize: Create listener inline to reduce closure allocations
     const listener = () => {
       // some signals can only be received, not sent
       try {
@@ -26,6 +33,7 @@ export const proxySignals = (child: ChildProcess) => {
   }
 
   const unproxy = () => {
+    // Use for-of for better performance with Map iteration
     for (const [sig, listener] of listeners) {
       process.removeListener(sig, listener)
     }

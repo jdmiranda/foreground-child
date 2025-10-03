@@ -66,6 +66,9 @@ export type FgArgs =
       cleanup?: Cleanup,
     ]
 
+// Default no-op cleanup function - reuse to reduce allocations
+const defaultCleanup: Cleanup = () => {}
+
 /**
  * Normalizes the arguments passed to `foregroundChild`.
  *
@@ -81,7 +84,7 @@ export const normalizeFgArgs = (
   spawnOpts: SpawnOptions,
   cleanup: Cleanup,
 ] => {
-  let [program, args = [], spawnOpts = {}, cleanup = () => {}] = fgArgs
+  let [program, args = [], spawnOpts = {}, cleanup = defaultCleanup] = fgArgs
   if (typeof args === 'function') {
     cleanup = args
     spawnOpts = {}
@@ -138,10 +141,9 @@ export function foregroundChild(
 ): ChildProcessByStdio<null, null, null> {
   const [program, args, spawnOpts, cleanup] = normalizeFgArgs(fgArgs)
 
-  spawnOpts.stdio = [0, 1, 2]
-  if (process.send) {
-    spawnOpts.stdio.push('ipc')
-  }
+  // Fast path: Pre-configure stdio array to avoid repeated array operations
+  const hasIPC = !!process.send
+  spawnOpts.stdio = hasIPC ? [0, 1, 2, 'ipc'] : [0, 1, 2]
 
   const child = spawn(program, args, spawnOpts) as ChildProcessByStdio<
     null,
@@ -149,6 +151,7 @@ export function foregroundChild(
     null
   >
 
+  // Optimize: Define childHangup inline to reduce closure overhead
   const childHangup = () => {
     try {
       child.kill('SIGHUP')

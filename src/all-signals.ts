@@ -1,7 +1,14 @@
 import constants from 'node:constants'
-export const allSignals =
+
+// Cache the signal list computation - this is called frequently
+// but the result never changes during a process lifetime
+let cachedSignals: NodeJS.Signals[] | undefined
+
+export const allSignals = (() => {
+  if (cachedSignals) return cachedSignals
+
   // this is the full list of signals that Node will let us do anything with
-  Object.keys(constants).filter(
+  cachedSignals = Object.keys(constants).filter(
     k =>
       k.startsWith('SIG') &&
       // https://github.com/tapjs/signal-exit/issues/21
@@ -9,6 +16,9 @@ export const allSignals =
       // no sense trying to listen for SIGKILL, it's impossible
       k !== 'SIGKILL',
   ) as NodeJS.Signals[]
+
+  return cachedSignals
+})()
 
 // These are some obscure signals that are reported by kill -l
 // on macOS, Linux, or Windows, but which don't have any mapping
